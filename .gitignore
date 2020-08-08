@@ -1,1 +1,2 @@
-docker/.DS_Store
+.DS_Store
+docker/code/gitlab-runner/environment/jdk-8u261-linux-x64.tar.gz

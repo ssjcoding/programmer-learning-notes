@@ -1,0 +1,10 @@
+version: '3.1'
+services:
+  gitlab-runner:
+    build: environment
+    restart: always
+    container_name: gitlab-runner
+    privileged: true
+    volumes:
+      - /opt/docker_runner/config:/etc/gitlab-runner
+      - /var/run/docker.sock:/var/run/docker.sock

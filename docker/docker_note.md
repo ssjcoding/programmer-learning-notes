@@ -1,7 +1,3 @@
----
-
----
-
 [TOC]
 
 ## 一、Docker介绍
@@ -554,9 +550,176 @@ services:
 docker-compose up -d
 ```
 
+```sh
+# 出现问题
+# 在启动过程中会出现错误
+================================================================================
+    Error executing action `create` on resource 'storage_directory[/var/opt/gitlab/git-data/repositories]'
+================================================================================
 
+================================================================================
+      Error executing action `run` on resource 'ruby_block[directory resource: /var/opt/gitlab/git-data/repositories]'
+================================================================================
+
+# 错误原因是文件夹权限不够，需要在宿主机上进行授权
+# 原文中显示路径为/var/opt/gitlab/git-data/repositories 但是做了数据卷：/opt/docker_gitlab/data:/var/opt/gitlab
+# 所以需要下宿主机上进行相应授权
+chmod -R 2770 /opt/docker_gitlab/data/git-data/repositories
+```
 
 #### 6.3.2 搭建GitLab-Runner
+
+##### 6.3.2.1 安装环境准备
+
+```shell
+# 目录结构
+gitlab-runner
+    ├── docker-compose.yml
+    └── environment
+         ├── daemon.json
+         ├── Dockerfile
+         └── jdk-8u261-linux-x64.tar.gz
+```
+
+> - 创建构建目录 `gitlab-runner/environment`
+> - 下载 jdk-8u261-linux-x64.tar.gz 并复制到 `environment`
+> - 在 `environment` 目录下创建`daemon.json`
+
+```json
+# daemon.json内容如下
+{
+  "registry-mirrors": [
+    "http://aad0405c.m.daocloud.io"
+  ],
+  "insecure-registries": [
+    "192.168.75.131:5000"
+  ]
+}
+```
+
+> `registry-mirrors`: docker镜像地址
+>
+> `insecure-registries`: Registry镜像私服地址
+
+> 在`environment`目录下创建`Dockerfile`
+
+```sh
+FROM gitlab/gitlab-runner:v11.1.0
+MAINTAINER Gbx <454368813@163.com>
+
+# 修改软件源
+RUN echo 'deb http://mirrors.aliyun.com/ubuntu/ xenial main restricted universe multiverse' > /etc/apt/sources.list && \
+    echo 'deb http://mirrors.aliyun.com/ubuntu/ xenial-security main restricted universe multiverse' >> /etc/apt/sources.list && \
+    echo 'deb http://mirrors.aliyun.com/ubuntu/ xenial-updates main restricted universe multiverse' >> /etc/apt/sources.list && \
+    echo 'deb http://mirrors.aliyun.com/ubuntu/ xenial-backports main restricted universe multiverse' >> /etc/apt/sources.list && \
+    apt-get update -y && \
+    apt-get clean
+
+# 安装 Docker
+RUN apt-get -y install apt-transport-https ca-certificates curl software-properties-common && \
+    curl -fsSL http://mirrors.aliyun.com/docker-ce/linux/ubuntu/gpg | apt-key add - && \
+    add-apt-repository "deb [arch=amd64] http://mirrors.aliyun.com/docker-ce/linux/ubuntu $(lsb_release -cs) stable" && \
+    apt-get update -y && \
+    apt-get install -y docker-ce
+COPY daemon.json /etc/docker/daemon.json
+
+# 安装 Docker Compose
+WORKDIR /usr/local/bin
+RUN curl -L https://get.daocloud.io/docker/compose/releases/download/1.21.2/docker-compose-`uname -s`-`uname -m` > ./docker-compose
+RUN chmod +x docker-compose
+
+# 安装 Java
+RUN mkdir -p /usr/local/java
+WORKDIR /usr/local/java
+COPY jdk-8u261-linux-x64.tar.gz /usr/local/java
+RUN tar -zxvf jdk-8u261-linux-x64.tar.gz && \
+    rm -fr jdk-8u261-linux-x64.tar.gz
+
+# 安装 Maven
+RUN mkdir -p /usr/local/maven
+WORKDIR /usr/local/maven
+RUN wget http://mirrors.hust.edu.cn/apache/maven/maven-3/3.6.3/binaries/apache-maven-3.6.3-bin.tar.gz
+# COPY apache-maven-3.6.3-bin.tar.gz /usr/local/maven
+RUN tar -zxvf apache-maven-3.6.3-bin.tar.gz && \
+    rm -fr apache-maven-3.6.3-bin.tar.gz
+# COPY settings.xml /usr/local/maven/apache-maven-3.6.3/conf/settings.xml
+
+# 配置环境变量
+ENV JAVA_HOME /usr/local/java/jdk1.8.0_261
+ENV MAVEN_HOME /usr/local/maven/apache-maven-3.6.3
+ENV PATH $PATH:$JAVA_HOME/bin:$MAVEN_HOME/bin
+
+WORKDIR /
+```
+
+> 在`gitlab-runner`目录下创建`docker-compose.yml`
+
+```sh
+version: '3.1'
+services:
+  gitlab-runner:
+    build: environment
+    restart: always
+    container_name: gitlab-runner
+    privileged: true
+    volumes:
+      - /opt/docker_runner/config:/etc/gitlab-runner
+      - /var/run/docker.sock:/var/run/docker.sock
+```
+
+##### 6.3.2.2 运行并注册Runner
+
+> 创建工程`testci`
+
+> 在`gitlab-runner`目录下运行
+
+```sh
+docker-compose up -d
+```
+
+> 打开Gitlab要持续集成的仓库,打开`设置`->`CI/CD`->`Runner`
+>
+> 在`Setup a specific Runner manually`下获取仓库地址和注册令牌备用
+
+![image-20200809033649869](/Users/ssh/Documents/private/project/github/programmer-learning-notes/docker/docker_note.assets/image-20200809033649869.png)
+
+```sh
+# 输入注册命令
+docker exec -it gitlab-runner gitlab-runner register
+```
+
+> 根据提示输入刚才获得的地址和令牌,进行注册
+
+```sh
+# 输入 GitLab 地址
+Please enter the gitlab-ci coordinator URL (e.g. https://gitlab.com/):
+http://192.168.2.106:8929/
+
+# 输入 GitLab Token
+Please enter the gitlab-ci token for this runner:
+htEsLRLc9vks7G5o41v2
+
+# 输入 Runner 的说明
+Please enter the gitlab-ci description for this runner:
+可以为空
+
+# 设置 Tag，可以用于指定在构建规定的 tag 时触发 ci
+Please enter the gitlab-ci tags for this runner (comma separated):
+deploy(也可以为空)
+
+# 选择 runner 执行器，这里我们选择的是 shell
+Please enter the executor: virtualbox, docker+machine, parallels, shell, ssh, docker-ssh+machine, kubernetes, docker, docker-ssh:
+shell
+```
+
+> 绑定成功标识如下图
+
+![image-20200809034042641](/Users/ssh/Documents/private/project/github/programmer-learning-notes/docker/docker_note.assets/image-20200809034042641.png)
+
+##### 6.3.2.3 代码的持续集成
+
+> - 在代码中编写`.gitlab-ci.yml`以及需要用到的`docker-compose.yml`和`Dockerfile`
+> - 推送代码的时候就会在Gitlab的页面中看到持续集成的作业进度
 
 
 
@@ -594,7 +757,11 @@ docker-compose up -d
 >
 > [基于docker-compose搭建gitlab](https://blog.csdn.net/u014255506/article/details/106665982/)
 >
-> 
+> [使用Docker 搭建Gitlab-Runner持续集成平台](https://www.jianshu.com/p/3c1c13c51224)
+>
+> [解决：Connecting to raw.githubusercontent.com failed 以及 Connection refused](https://blog.csdn.net/yssa1125001/article/details/104176073)
+>
+> [使用Gitlab-Runner持续集成代码](https://www.jianshu.com/p/494d1bcac5dd)
 
 
 
