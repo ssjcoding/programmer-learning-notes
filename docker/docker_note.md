@@ -1,3 +1,7 @@
+---
+
+---
+
 [TOC]
 
 ## 一、Docker介绍
@@ -31,7 +35,17 @@
 
 ## 二、Docker的基本操作
 
-### 2.1 Docker的中央仓库【注册中心】
+### 2.1 Ma'c 中安装Docker
+
+```sh
+# macOS 我们可以使用 Homebrew 来安装 Docker
+brew cask install docker
+# 在载入 Docker app 后，点击 Next，可能会询问你的 macOS 登陆密码，你输入即可。之后会弹出一个 Docker 运行的提示窗口，状态栏上也有有个小鲸鱼的图标
+```
+
+
+
+### 2.2 Docker的中央仓库【注册中心】
 
 > 1. Docker官方的中央仓库：这个仓库是镜像最全的，但是下载速度较慢
 >
@@ -56,7 +70,7 @@ systemctl daemon-reload
 systemctl	restart docker
 ```
 
-### 2.2 镜像的操作
+### 2.3 镜像的操作
 
 ```sh
 # 1、拉取镜像到本地
@@ -85,7 +99,7 @@ docker load -i 镜像文件
 docker tag 镜像id 新镜像名称:版本
 ```
 
-### 2.3 容器的操作
+### 2.4 容器的操作
 
 ```sh
 # 1、运行容器
@@ -133,11 +147,46 @@ docker rm $(docker ps -qa)
 docker start 容器id
 ```
 
+```
+# 7、容器与宿主机内容互拷
+# 从容器里面拷文件到宿主机
+docker cp 容器名：要拷贝的文件在容器里面的路径 要拷贝到宿主机的相应路径 
+# 从宿主机拷文件到容器里面
+docker cp 要拷贝的文件路径 容器名：要拷贝到容器里面对应的路径
+```
+
+```
+# 8、查看Docker的底层信心
+# docker inspect 会返回一个 JSON 文件记录着 Docker 容器的配置和状态信息
+# ID/NAMES：容器ID/容器名称
+# 查看容器所有状态信息
+docker inspect NAMES
+# 查看 容器ip 地址
+docker inspect --format='{{.NetworkSettings.IPAddress}}' ID/NAMES
+# 容器运行状态
+docker inspect --format '{{.Name}} {{.State.Running}}' NAMES
+# 查看进程信息
+docker top NAMES
+# 查看端口；(使用容器ID 或者 容器名称)
+docker port ID/NAMES
+# 查看IP地址 也可以直接通过用 远程执行命令也可以（Centos7）
+docker exec -it ID/NAMES ip addr 
+```
+
+```
+# 9、查看宿主机与镜像映射端口
+docker port 容器id
+```
+
+
+
 ## 三、Docker的应用
 
 ### 3.1 准备SSM工程
 
 > MySQL数据库的连接用户名和密码改变了，修改db.properties
+>
+> ssm工程中的jdbc连接url中ip写为宿主机ip
 
 ### 3.2 准备MySQL容器
 
@@ -152,7 +201,7 @@ docker run -d -p 3306:3306 --name mysql -e MYSQL_ROOT_PASSWORD=root daocloud.io/
 # 运行Tomcat容器，前面已经搞定，只需要将SSM项目的war包部署到Tomcat内部即可
 # 可以通过命令将宿主机的内容复制到容器内部
 docker cp 文件名 容器id:容器内部路径
-# 举个离职
+# example
 docker cp ssm.war fe:/user/local/tomcat/webapps
 ```
 
@@ -198,4 +247,354 @@ docker run -v 路径:容器内部的路径 镜像id
 ## 四、Docker自定义镜像
 
 > 中央仓库上的镜像，也是Docker的用户自己上传过去的。
+
+### 4.1 Dockerfile文件说明
+
+> Dockerfile文件中常用的内容
+>
+> - from: 用于指定其后构建新镜像所使用的基础镜像。FROM 指令必是 Dockerfile 文件中的首条命令，启动构建流程后，Docker 将会基于该镜像构建新镜像，FROM 后的命令也会基于这个基础镜像。
+> - copy: 将相对路径下的内容复制到自定义镜像中
+> - workdir: 用于在容器内设置一个工作目录。
+> - add: 更高级的复制命令，将原路径文件赋值到目标路径中
+> - run: 在容器中执行Shell命令，requirments.txt中反正索要下载以来的名称
+> - expose: 为构建的镜像设置监听端口，使容器在运行时监听
+> - env: 设置环境变量而已，无论是后面的其它指令，如 RUN，还是运行时的应用，都可以直接使用这里
+> - 定义的环境变量。
+> - cmd: 用于指定在容器启动时所要执行的命令（在workdir下执行的。cmd可以写多个，但是只以最后一个为准）
+
+### 4.2 EXAMPLE-1（tomcat镜像+ssm工程）
+
+> 自定义一个tomcat镜像，并且将ssm.war部署到tomcat中
+>
+> ```sh
+> # Dockerfile文件内容如下
+> 
+> from daocloud.io/library/tomcat:8.5.15-jre8
+> copy ssm.war /usr/local/tomcat/webapps
+> ```
+>
+> ```sh
+> # 将准备好的Dockerfile和相应的文件拖拽到Linux操作系统中，通过Docker的命令制作镜像，最后点表示从当地按目录获取dockerfile等相关文件
+> docker build -t 镜像名称:[tag] .
+> # example
+> docker build -t ssm-tomcat:1.0.0 .
+> 
+> # 查看刚才制作的镜像
+> docker images
+> # 启动制作的镜像
+> docker run -d -p 8081:8080 --name custom-ssm-tomcat ssm-tomcat:1.0.0
+> ```
+
+### EXAMPLE-2（python编写的web应用）
+
+> 制作一个docker，其中部署一个用Python编写的Web应用
+>
+> ```python
+> '''web应用代码如下app.py''' 
+> 
+> from flask import Flask
+> import socket
+> import os
+> 
+> app = Flask(__name__)
+> 
+> @app.route('/')
+> def hello():
+>     html = "<h3>Hello {name}!</h3>" \
+>            "<b>Hostname:</b> {hostname}<br/>"           
+>     return html.format(name=os.getenv("NAME", "world"), hostname=socket.gethostname())
+>     
+> if __name__ == "__main__":
+>     app.run(host='0.0.0.0', port=80)
+> ```
+>
+> ```sh
+> ‘’‘Dockerfile文件内容如下’‘’
+> 
+> # 使用官方提供的 Python 作为我们镜像的基础环境
+> FROM daocloud.io/library/python:3.5-slim
+> 
+> # 将工作目录切换为 /Users/ssh/Documents/private/project/github/programmer-learning-notes/docker/code/example-2/test
+> WORKDIR /Users/ssh/Documents/private/project/github/programmer-learning-notes/docker/code/example-2/test
+> 
+> # 将当前目录下的所有内容复制到 /Users/ssh/Documents/private/project/github/programmer-learning-notes/docker/code/example-2/test 下
+> ADD . /Users/ssh/Documents/private/project/github/programmer-learning-notes/docker/code/example-2/test
+> 
+> # 使用 pip 命令安装这个应用所需要的依赖
+> RUN pip install --trusted-host pypi.python.org -r requirements.txt
+> 
+> # 允许外界访问容器的 80 端口
+> EXPOSE 80
+> 
+> # 设置环境变量
+> ENV NAME World
+> 
+> # 设置容器进程为：python app.py，即：这个 Python 应用的启动命令
+> CMD ["python", "app.py"]
+> ```
+>
+> ```sh
+> ## requirements.txt 内容
+> flask==1.1.1
+> ```
+>
+> ```sh
+> # 在存放Dockerfile目录下执行一下命令
+> docker build -t python_web:1.0.0 .
+> # 启动镜像，如果不指定绑定4000端口的话，那么就会在宿主机上随机分配一个端口与镜像进行连接
+> docker run -d -p 4000:80 --name python_web python_web:1.0.0
+> ```
+
+
+
+## 五、Docker-Compose
+
+> - 之前运行一个镜像，需要添加大量的参数，可以通过Docker-Compose编写这些参数
+>
+> - Docker-Compose可以帮助我们批量的管理容器，只需要通过一个docker-compose.yml文件维护即可
+
+### 5.1 安装docker-compose
+
+> mac 版本通过brew进行安装的docker 默认docker-compose已经安装
+
+#### 5.1.1 手动安装
+
+```sh
+## 以linux安装为例
+# 1、去github官网搜索并下载docker-compose
+https://github.com/docker/compose/releases/tag/1.26.0
+# 2、将下载好的文件放到宿主机
+# 3、对DockerCompose重命名，并授予可执行权限
+mv docker-compose-Linux-x86_64 docker-compose
+chmod 777 docker-compose
+# 4、为了方便后期操作，配置环境变量
+# 将docker-compose文件移动到/usr/local/bin，修改/etc/profile文件，给/usr/local/bin配置到PATH中
+mv docker-compose /usr/local/bin
+vi /etc/profile
+	export PATH=$PATH;/usr/local/bin
+source /etc/profile
+# 5、测试
+# 在任意目录下数据docker-compose,返回如下图片说明安装成功
+```
+
+![image-20200808150333732](/Users/ssh/Documents/private/project/github/programmer-learning-notes/docker/docker_note.assets/image-20200808150333732.png)
+
+### 5.2 docker-compose管理MySQL和Tomcat容器
+
+> - yml文件以key: value方式来指定配置文件信息
+>
+> - 多个配置信息以换行+索引的方式来区分
+> - 在docker-compose.yml文件中，不要使用制表符，使用缩进采用两个空格
+
+```yaml
+version: '3.1'
+services:
+  mysql:                                        # 服务的名称
+    restart: always                             # 代表只要docker启动
+    image: daocloud.io/library/mysql:5.7.4      # 指定镜像路径
+    container_name: mysql                       # 指定容器名称
+    ports:                                      # 指定端口号的映射，可以指定多个
+      - 3306:3306
+    environment:                                # 指定一些环境
+      MYSQL_ROOT_PASSWORD: root                 # 指定MySQL的ROOT用户登录密码
+      TZ: Asia/Shanghai                         # 指定时区
+    volumes:
+      - /opt/docker_mysql_tomcat/mysql_data:/var/lib/mysql   # 映射数据卷，将容器目录：/var/lib/mysql映射到宿主机目录：/opt/docker_mysql_tomcat/mysql_data
+  tomcat:
+    restart: always
+    image: daocloud.io/library/tomcat:8.5.15-jre8
+    container_name: tomcat
+    ports:
+      - 8080:8080
+    environment:
+      TZ: Asia/Shanghai
+    volumes:
+      - /opt/docker_mysql_tomcat/tomcat_webapps:/var/local/tomcat/webapps
+      - /opt/docker_mysql_tomcat/tomcat_logs:/var/local/tomcat/logs
+```
+
+### 5.3 使用docker-compose命令管理容器
+
+> 在使用docker-compose的命令时，默认会在当前目录下找docker-compose.yml文件
+
+```sh
+# 1、基于docker-compose.yml启动管理的容器
+docker-compose up -d 
+```
+
+```sh
+# 2、关闭并删除容器
+docker-compose down
+```
+
+```sh
+# 3、开启或关闭已经存在的有docker-compose维护的容器
+docker-compose start|stop|restart
+```
+
+```sh
+# 4、查看有docker-compose管理的容器
+docker-compose ps
+```
+
+```sh
+# 5、查看日志
+docker-compose logs -f
+```
+
+### 5.4 docker-compose配置Dockerfile使用
+
+> 使用docker-compose.yml文件以及Dockerfile文件在生成自定义镜像的同时启动当前镜像，
+>
+> 并且有docker-compose去管理容器
+
+**docker-compose.yml**
+
+```yaml
+# yaml文件
+version: '3.1'
+services:
+  ssm:                                        # 服务的名称
+  build:                                      # 构建自定义镜像
+    context: ../                              # 指定dockerfile文件的所在路径
+    dockerfile: Dockerfile                    # 指定Dockerfile文件名称
+  image: ssm:1.0.1
+  container_name: ssm
+  ports:
+    - 8081:8080
+  environment:
+    TZ: Azsia/Shanghai
+```
+
+**Dockerfile文件**
+
+```sh
+from daocloud.io/library/tomcat:8.5.15-jre8
+copy ssm.war /usr/local/tomcat/webapps
+```
+
+```sh
+# 1、可以直接启动基于docker-compose.yml以及Dockerfile文件构建的自定义镜像
+docker-compose up -d
+# 如果自定义镜像不存在，会帮助我们创建出自定义镜像，如果自定义镜像已经存在，会直接运行这个自定义镜像
+# 重新构建的话
+# 重新构建自定义镜像
+docker-compose build
+# 运行前，重新构建
+docker-compose up -d --build
+```
+
+## 六、Docker CI、CD
+
+### 6.1 引言
+
+> 项目部署
+>
+> 1. 将项目通过m编译打包
+> 2. 将文件上传到指定的服务器中
+> 3. 将war包放到tomcat的目录中
+> 4. 通过Dockerfile将Tomcat和war包转成一个镜像，由DockerCompose去运行容器
+>
+> 项目更新了
+>
+> ​	将上述l流程再次的从头到尾的执行一次
+
+### 6.2 CI介绍
+
+> CI（continuous intergration）持续集成
+>
+> 持续集成：编写代码时，完成了一个功能后，立即提交代码到Git仓库中，将项目重新的构建并且测试
+>
+> - 快速发现错误
+> - 防止代码偏离主分支
+
+### 6.3 实现持续集成
+
+#### 6.3.1 搭建Gitlab服务器
+
+> 1、创建一个全新的虚拟机，并且至少指定4G的运行内存
+
+> 2、安装docker以及docker-compose
+
+> 3、将ssh的默认22端口，修改为60022端口
+
+```sh
+vi /etc/ssh/sshd_config
+	PORT 22 -> 60022
+systemctl restart sshd
+```
+
+> 4、docker-compose.yml文件去安装gitlab（下载和运行的时间比较常的）
+
+```sh
+version: '3.1'
+services:
+  gitlab:
+    image: 'gitlab/gitlab-ce:latest'
+    restart: always
+    hostname: 'gitlab'
+    privileged: true
+    environment:
+      GITLAB_OMNIBUS_CONFIG: |
+        external_url '192.168.2.106:8929' # http协议所使用的访问地址,不加端口默认80
+        gitlab_rails['gitlab_shell_ssh_port'] = 2224 # 此端口是run时22端口映射的2224端口
+        gitlab_rails['smtp_enable'] = true
+        gitlab_rails['time_zone'] = 'Asia/Shanghai'
+    ports:
+      - '8929:8929'
+      - '2224:22'
+    volumes:
+      - '/opt/docker_gitlab/config:/etc/gitlab'
+      - '/opt/docker_gitlab/logs:/var/log/gitlab'
+      - '/opt/docker_gitlab/data:/var/opt/gitlab'
+```
+
+```
+# 启动容器
+docker-compose up -d
+```
+
+
+
+#### 6.3.2 搭建GitLab-Runner
+
+
+
+#### 6.3.3 整合项目入门测试
+
+> 1、创建maven工程，编写html页面
+
+> 2、编写gitlab-ci.yml文件
+
+> 3、将maven工程推送到gitlab中
+
+> 4、可以在gitlab中查看到gitlab-ci.yml编写的内容
+
+
+
+
+
+
+
+
+
+
+
+------
+
+> 参考文献
+>
+> [自定义Docker容器镜像并将其上传到DockerHub中](https://www.jianshu.com/p/c09bdf9b24ca)
+>
+> [2020 Docker最新超详细版教程通俗易懂](https://www.bilibili.com/video/BV1sK4y1s7Cj)
+>
+> [手把手教你入门SSM框架开发](https://github.com/TyCoding/ssm)
+>
+> [Docker 查看容器 IP 地址](https://www.cnblogs.com/sharesdk/p/10185931.html)
+>
+> [基于docker-compose搭建gitlab](https://blog.csdn.net/u014255506/article/details/106665982/)
+>
+> 
+
+
 

@@ -1,0 +1,19 @@
+version: '3.1'
+services:
+  gitlab:
+    image: 'gitlab/gitlab-ce:latest'
+    restart: always
+    hostname: 'gitlab'
+    environment:
+      GITLAB_OMNIBUS_CONFIG: |
+        external_url 'http://192.168.2.106:8929' # http协议所使用的访问地址,不加端口默认80
+        gitlab_rails['gitlab_shell_ssh_port'] = 2224 # 此端口是run时22端口映射的2224端口
+        gitlab_rails['smtp_enable'] = true
+        gitlab_rails['time_zone'] = 'Asia/Shanghai'
+    ports:
+      - '8929:8929'
+      - '2224:22'
+    volumes:
+      - '/opt/docker_gitlab/config:/etc/gitlab'
+      - '/opt/docker_gitlab/logs:/var/log/gitlab'
+      - '/opt/docker_gitlab/data:/var/opt/gitlab'
