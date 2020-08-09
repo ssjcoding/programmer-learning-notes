@@ -667,6 +667,8 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
 ```
 
+> 在宿主机启动docker程序后先执行`sudo chown root:root /var/run/docker.sock` （如果重启过docker，重新执行）
+
 ##### 6.3.2.2 运行并注册Runner
 
 > 创建工程`testci`
@@ -676,6 +678,8 @@ services:
 ```sh
 docker-compose up -d
 ```
+
+> 添加容器权限，保证容器可以使用宿主机的`docker exec -it gitlab-runner usermod -aC root gitlab-runner`
 
 > 打开Gitlab要持续集成的仓库,打开`设置`->`CI/CD`->`Runner`
 >
@@ -725,21 +729,92 @@ shell
 
 #### 6.3.3 整合项目入门测试
 
-> 1、创建maven工程，编写html页面
+> 1、创建maven工程，添加we'b.xml文件，编写html页面
+
+![image-20200809122014437](/Users/ssh/Documents/private/project/github/programmer-learning-notes/docker/docker_note.assets/image-20200809122014437.png)
 
 > 2、编写gitlab-ci.yml文件
 
+```yaml
+stages:
+  - test
+
+test:
+  stage: test
+  script:
+    - echo first test ci  # 输入的命令，可以输入多个
+```
+
 > 3、将maven工程推送到gitlab中
 
-> 4、可以在gitlab中查看到gitlab-ci.yml编写的内容
+> 4、可以在gitlab中查看到gitlab-ci.yml编写的内容，如下图
 
+![image-20200809125332495](/Users/ssh/Documents/private/project/github/programmer-learning-notes/docker/docker_note.assets/image-20200809125332495.png)
 
+#### 6.3.4 编写.gitlab-ci.yml文件
 
+> 1、编写.gitlab-ci.yml测试命令使用
 
+```yml
+stages:
+  - test
 
+test:
+  stage: test
+  script:
+    - echo first test ci
+    - /usr/local/maven/apache-maven-3.6.3/bin/mvn package
+```
 
+> 2、编写关于dockerfile以及docker-compose.yml文件的具体内容
 
+```
+# 1. 准备Dockerfile
+FROM daocloud.io/library/tomcat:8.5.15-jre8
+COPY testci.war /user/local/tomcat/webapps
+```
 
+```yaml
+# 2. docker-coompose.yml
+version: "3.1"
+services:
+  testci:
+    build: docker
+    restart: always
+    container_name: testci
+    ports:
+      - 8080:8080
+```
+
+```yaml
+# 3. .gitlab-ci.yml
+stages:
+  - test
+
+test:
+  stage: test
+  script:
+    - echo first test ci
+    - /usr/local/maven/apache-maven-3.6.3/bin/mvn package
+    - cp target/testci-1.0-SNAPSHOT.war docker/testci.war
+    - docker-compose down
+    - docker-compose up -d --build
+    - docker rmi $(docker images -qf dangling=true)   # 删除build后老的images 变成None的情况
+```
+
+> 3、测试效果：每次推送后都可以在浏览器中看到变化
+
+![image-20200809125906146](/Users/ssh/Documents/private/project/github/programmer-learning-notes/docker/docker_note.assets/image-20200809125906146.png)
+
+### 6.4 CD介绍
+
+> CD（持续交付，持续部署）
+>
+> 持续交付：将代码交付给专业的测试团队去测试（gitlab-runner）
+>
+> 持续部署：将测试通过的代码，发布到生产环境（jenkins）
+
+![image-20200809130846346](/Users/ssh/Documents/private/project/github/programmer-learning-notes/docker/docker_note.assets/image-20200809130846346.png)
 
 
 
